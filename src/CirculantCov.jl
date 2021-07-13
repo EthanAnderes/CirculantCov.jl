@@ -4,7 +4,6 @@ using Dierckx: Spline1D
 using ApproxFun: Fun, Jacobi
 using FastTransforms: jac2cheb
 
-
 # J
 # ==================================================
 
@@ -38,7 +37,6 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-
 # Types that compute the isotropic part of 
 # Spin2 and Spin0 CMBfields
 # ==================================================
@@ -57,12 +55,15 @@ end
 # constructors
 # ==================================================
 
+shift_scale_sin(β,period) = period * (sin(π*β/period - π/2) + 1) / 2
+
+βsingrid(ngrid, period)   = shift_scale_sin.(range(0,π,length=ngrid), period)
+
 function βcovSpin2(
         ℓ, eeℓ, bbℓ;
-        n_grid::Int = 100_000, 
-        β_grid = range(0, π^(1/3), length=n_grid).^3,
+        ngrid::Int = 100_000, 
+        βgrid = βsingrid(ngrid, π),
     )
-
     @assert ℓ[1] == 0
     @assert ℓ[2] == 1
     nℓ = @. (2ℓ+1)/(4π)
@@ -72,35 +73,27 @@ function βcovSpin2(
     ## ↓  TODO: check the a,b swap
     f2⁺2  = ((a,b,jℓ)=(0,4,j2⁺2ℓ);  Fun(Jacobi(b,a),jℓ))
     f2⁻2  = ((a,b,jℓ)=(4,0,j2⁻2ℓ);  Fun(Jacobi(b,a),jℓ))
-    # pre-canceled out cos β½ and sin β½ in the denom
+    # !! pre-canceled out cos β½ and sin β½ in the denom
     covPP̄ = x-> f2⁺2(cos(x))
     covPP = x-> f2⁻2(cos(x))
-    β2covPP̄ = Spline1D(β_grid, covPP̄.(β_grid), k=3)
-    β2covPP = Spline1D(β_grid, covPP.(β_grid), k=3)
-
-    return βcovSpin2(β2covPP̄, β2covPP)
-
+    β2covPP̄ = Spline1D(βgrid, covPP̄.(βgrid), k=3)
+    β2covPP = Spline1D(βgrid, covPP.(βgrid), k=3)
+    βcovSpin2(β2covPP̄, β2covPP)
 end 
 
 function βcovSpin0(
         ℓ, ttℓ;
-        n_grid::Int = 100_000, 
-        β_grid = range(0, π^(1/3), length=n_grid).^3,
+        ngrid::Int = 100_000, 
+        βgrid = βsingrid(ngrid,π),
     )
-
     @assert ℓ[1] == 0
     @assert ℓ[2] == 1
     nℓ = @. (2ℓ+1)/(4π)
-    ## ↓ starts at 2 since the Jacobi expansion goes like J^(a,b)_{ℓ-2}
     j0⁺0tℓ = @. ttℓ * nℓ
-    ## ↓  TODO: check the a,b swap
     f0⁺0t = ((a,b,jℓ)=(0,0,j0⁺0tℓ); Fun(Jacobi(b,a),jℓ))
-    ## leaving out the outer factors witch cancel with the sphere rotation
     covtt = x-> f0⁺0t(cos(x))
-    β2covtt = Spline1D(β_grid, covtt.(β_grid), k=3)
-
-    return βcovSpin0(β2covtt)
-
+    β2covtt = Spline1D(βgrid, covtt.(βgrid), k=3)
+    βcovSpin0(β2covtt)
 end 
 
 
@@ -115,61 +108,71 @@ function (covP::βcovSpin2)(β::Matrix)
         rtnPP̄[:,col] = covP.covPP̄_premult_spln(cβ)
         rtnPP[:,col] = covP.covPP_premult_spln(cβ)
     end
-    return complex.(rtnPP̄,0), complex.(rtnPP,0) 
+    return complex(rtnPP̄), complex(rtnPP)
 end
 function (covP::βcovSpin2)(β::Union{Vector, Number})
     rtnPP̄ = covP.covPP̄_premult_spln(β)
     rtnPP = covP.covPP_premult_spln(β)
-    return complex.(rtnPP̄,0), complex.(rtnPP,0)     
+    return complex(rtnPP̄), complex(rtnPP)
 end
 
+# Note: the reason we have different methods for Matrix vrs 
+# Union{Vector, Number} is that Spline1D's are optimized for 
+# Union{Vector, Number} so in general it is better to broadcast 
+# via via whole columns
+
+# Also note: the only reason we make the return argument complex 
+# is that is the eltype the planned FFT will expect. 
 
 function (covP::βcovSpin0)(β::Matrix)
     rtn = similar(β)
     for (col, cβ) ∈ enumerate(eachcol(β))
         rtn[:,col] = covP.covII_premult_spln(cβ)
     end
-    return rtn  
+    return complex(rtn)  
 end
 function (covP::βcovSpin0)(β::Union{Vector, Number})
-    return covP.covII_premult_spln(β)
+    return complex(covP.covII_premult_spln(β))
 end
 
 
 # necessary geometric methods with angles and geodesics
 # ==================================================
 
-function sincosΔθpθΔφ(θ1, θ2, φ1, φ2)
-    𝓅θ½ = (θ1 + θ2)/2
-    Δθ½ = (θ1 - θ2)/2
-    Δφ½ = (φ1 - φ2)/2
-    s𝓅θ½, c𝓅θ½ = sincos(𝓅θ½)
-    sΔθ½, cΔθ½ = sincos(Δθ½)
-    sΔφ½, cΔφ½ = sincos(Δφ½)
-    return sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½
+function geoβ(θ₁, θ₂, φ₁, φ₂)
+    sΔθ½, sΔφ½ = sin((θ₁ - θ₂)/2), sin((φ₁ - φ₂)/2)
+    2asin(√(sΔθ½^2 + sin(θ₁)*sin(θ₂) * sΔφ½^2))    
 end
 
-function geoβ(θ1, θ2, φ1, φ2)
-    sθ1, sθ2 = sin(θ1), sin(θ2)
-    sΔθ½, sΔφ½, = sincosΔθpθΔφ(θ1, θ2, φ1, φ2)
-    return 2asin(√(sΔθ½^2 + sθ1 * sθ2 * sΔφ½^2))    
+function cosgeoβ(θ₁, θ₂, φ₁, φ₂)
+    cos(θ₁-θ₂) - sin(θ₁)*sin(θ₂)*(1-cos(φ₁-φ₂))/2
 end
 
 
 # Multipliers needed to convert the isotropic parts to full polarization cov 
 # =====================================================
 
-function multPP̄(θ1, θ2, φ1, φ2)
-    sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½ = sincosΔθpθΔφ(θ1, θ2, φ1, φ2)
+function sincosΔθpθΔφ(θ₁, θ₂, φ₁, φ₂)
+    𝓅θ½ = (θ₁ + θ₂)/2
+    Δθ½ = (θ₁ - θ₂)/2
+    Δφ½ = (φ₁ - φ₂)/2
+    s𝓅θ½, c𝓅θ½ = sincos(𝓅θ½)
+    sΔθ½, cΔθ½ = sincos(Δθ½)
+    sΔφ½, cΔφ½ = sincos(Δφ½)
+    return sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½
+end
+
+function multPP̄(θ₁, θ₂, φ₁, φ₂)
+    sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½ = sincosΔθpθΔφ(θ₁, θ₂, φ₁, φ₂)
     return complex(sΔφ½ * c𝓅θ½,   cΔφ½ * cΔθ½)^4
 end
 
-function multPP(θ1, θ2, φ1, φ2)
-    sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½ = sincosΔθpθΔφ(θ1, θ2, φ1, φ2)
+function multPP(θ₁, θ₂, φ₁, φ₂)
+    sΔθ½, sΔφ½, cΔθ½, cΔφ½, s𝓅θ½, c𝓅θ½ = sincosΔθpθΔφ(θ₁, θ₂, φ₁, φ₂)
     return complex(sΔφ½ * s𝓅θ½, - cΔφ½ * sΔθ½)^4
 end
 
-## multII(θ1, θ2, φ1, φ2) = 1
+## multII(θ₁, θ₂, φ₁, φ₂) = 1
 
 Q1Q2(covPP̄, covPP) = ( real(covPP̄) + real(covPP) ) / 2
 
