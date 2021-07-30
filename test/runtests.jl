@@ -7,6 +7,30 @@ end
 
 
 
+@testset "CirculantCov: counterclock_Δφ and fullcircle" begin
+    
+    φstart, φstop = 0, 1.0        ; @test counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
+    φstart, φstop = 0, π          ; @test counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
+    φstart, φstop = 0, 3π/2       ; @test counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
+    φstart, φstop = 0, 2pi - .001 ; @test counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
+
+    φstart, φstop = 2π - 0.5, 1.5 ; @test counterclock_Δφ(φstart, φstop) ≈ 2.0
+
+    φstart, φstop =  1.0        , 0 ; @test isapprox(counterclock_Δφ(φstart, φstop), 2pi - 1.0, rtol=1e-5)
+    φstart, φstop =  π          , 0 ; @test isapprox(counterclock_Δφ(φstart, φstop), π, rtol=1e-5)
+    φstart, φstop =  3π/2       , 0 ; @test isapprox(counterclock_Δφ(φstart, φstop), π/2, rtol=1e-5)
+    φstart, φstop =  2pi - .001 , 0 ; @test isapprox(counterclock_Δφ(φstart, φstop), .001, rtol=1e-5)
+
+    @test fullcircle(2pi * (0:9) / 10)[2]   == 1
+    @test fullcircle(pi/2 * (0:9) / 10)[2]  == 4
+    @test fullcircle(2pi/3 * (0:9) / 10)[2] == 3
+    @test all(fullcircle(2pi * (0:9) / 10)[1]  .≈ 2pi * (0:9) / 10)
+    @test all(fullcircle(pi/2 * (0:9) / 10)[1]  .≈ 2pi * (0:39) / 40)
+    @test all(fullcircle(2pi/3 * (0:9) / 10)[1]  .≈ 2pi * (0:29) / 30)
+
+end
+
+
 
 @testset "CirculantCov: periodize" begin
 

@@ -3,6 +3,7 @@ module CirculantCov
 using Dierckx: Spline1D 
 using ApproxFun: Fun, Jacobi
 using FastTransforms: jac2cheb
+using FFTW: plan_fft
 
 # J
 # ==================================================
@@ -26,7 +27,7 @@ function Jperm(ℓ::Int, n::Int)
 end
 
 
-# periodize
+# geometric methods with angles and geodesics and periodize
 # ==================================================
 
 function periodize(f::Vector{T}, freq_mult::Int) where {T}
@@ -35,6 +36,56 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     @assert nfm == n//freq_mult
     f′ = sum( circshift(f, k*nfm) for k=0:freq_mult-1)
     f′[1:nfm]
+end
+
+in_0_2π(φ) = rem2pi(φ, RoundDown)
+
+counterclock_Δφ(φstart, φstop) = in_0_2π(φstop - φstart)
+
+function fullcircle(φ::AbstractVector)
+    Δφpix  = counterclock_Δφ(φ[1], φ[2])
+    Δφspan = counterclock_Δφ(φ[1], φ[end]) + Δφpix
+    # The extra Δφpix makes Δφspan measure the (angular) distance between the 
+    # left boundary of the starting pixel and the right boundary of the ending pixel 
+    
+    @assert div(2π, Δφspan, RoundNearest) ≈ 2π / Δφspan
+    freq_mult = Int(div(2π, Δφspan, RoundNearest))
+    
+    nφ2π = length(φ)*freq_mult
+    φ2π  = @. in_0_2π(φ[1] + 2π * (0:nφ2π-1) / nφ2π) 
+
+    return φ2π, freq_mult
+end
+
+
+"""
+`fraccircle(∂φstart, ∂φstop, nφ)` specifies a uniform grid on a 
+contiguous interval of azumimuth. `∂φstart` begins the interval. Moving counter 
+clockwise (looking down from the north pole) to `∂φstop`. 
+Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `≥ 0`.
+
+Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)` 
+"""
+function fraccircle(∂φstart, ∂φstop, nφ)
+    @assert ∂φstart ≥ 0
+    @assert ∂φstop  ≥ 0
+    ∂φstart′, ∂φstop′ = in_0_2π(∂φstart), in_0_2π(∂φstop)
+    Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)
+    @assert div(2π, Δφspan, RoundNearest) ≈ 2π / Δφspan
+    
+    φ  = @. in_0_2π(∂φstart′ + Δφspan * (0:nφ-1) / nφ) 
+
+    return φ
+end
+
+
+function geoβ(θ₁, θ₂, φ₁, φ₂)
+    sΔθ½, sΔφ½ = sin((θ₁ - θ₂)/2), sin((φ₁ - φ₂)/2)
+    2asin(√(sΔθ½^2 + sin(θ₁)*sin(θ₂) * sΔφ½^2))    
+end
+
+function cosgeoβ(θ₁, θ₂, φ₁, φ₂)
+    cos(θ₁-θ₂) - sin(θ₁)*sin(θ₂)*(1-cos(φ₁-φ₂))/2
 end
 
 # Types that compute the isotropic part of 
@@ -136,17 +187,67 @@ function (covP::βcovSpin0)(β::Union{Vector, Number})
 end
 
 
-# necessary geometric methods with angles and geodesics
+# ... 
 # ==================================================
 
-function geoβ(θ₁, θ₂, φ₁, φ₂)
-    sΔθ½, sΔφ½ = sin((θ₁ - θ₂)/2), sin((φ₁ - φ₂)/2)
-    2asin(√(sΔθ½^2 + sin(θ₁)*sin(θ₂) * sΔφ½^2))    
+
+
+function γⱼₖℓ⃗_ξⱼₖℓ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, covβ::βcovSpin2, 
+    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
+    )
+    
+    φ2π, freq_mult = fullcircle(φ)
+
+    covPP̄, covPP = covβ(geoβ.(θ₁, θ₂, φ2π[1], φ2π))  
+    covPP̄  .*= multPP̄.(θ₁, θ₂, φ2π[1], φ2π)
+    covPP  .*= multPP.(θ₁, θ₂, φ2π[1], φ2π)
+
+    covPP̄′ = periodize(covPP̄, freq_mult)       
+    covPP′ = periodize(covPP, freq_mult)
+    γⱼₖℓ⃗    = planFFT * covPP̄′
+    ξⱼₖℓ⃗    = planFFT * covPP′
+
+    return γⱼₖℓ⃗, ξⱼₖℓ⃗
 end
 
-function cosgeoβ(θ₁, θ₂, φ₁, φ₂)
-    cos(θ₁-θ₂) - sin(θ₁)*sin(θ₂)*(1-cos(φ₁-φ₂))/2
+
+function γⱼₖℓ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, covβ::βcovSpin0, 
+    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
+    )
+    
+    φ2π, freq_mult = fullcircle(φ)
+    β = geoβ.(θ₁, θ₂, φ2π[1], φ2π)
+    covIĪ  = covβ(β)  
+    covIĪ′ = periodize(covIĪ, freq_mult)       
+    γⱼₖℓ⃗    = planFFT * covIĪ′
+
+    return γⱼₖℓ⃗
 end
+
+
+
+
+function γⱼₖℓ⃗_ξⱼₖℓ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗::Function, Cθ₁θ₂φ₁φ⃗::Function,
+    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
+    )
+    
+    φ2π, freq_mult = fullcircle(φ)
+    covPP̄  = Γθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
+    covPP  = Cθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄′ = periodize(covPP̄, freq_mult)       
+    covPP′ = periodize(covPP, freq_mult)       
+
+    γⱼₖℓ⃗    = planFFT * covPP̄′
+    ξⱼₖℓ⃗    = planFFT * covPP′
+
+    return γⱼₖℓ⃗, ξⱼₖℓ⃗
+end
+
+
+
 
 
 # Multipliers needed to convert the isotropic parts to full polarization cov 
