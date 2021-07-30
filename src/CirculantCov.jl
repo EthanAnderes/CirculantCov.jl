@@ -4,6 +4,7 @@ using Dierckx: Spline1D
 using ApproxFun: Fun, Jacobi
 using FastTransforms: jac2cheb
 using FFTW: plan_fft
+using LinearAlgebra: mul!
 
 # J
 # ==================================================
@@ -79,44 +80,127 @@ function fraccircle(∂φstart, ∂φstop, nφ)
 end
 
 
+"""
+`geoβ(θ₁, θ₂, φ₁, φ₂)` -> Geodesic between two spherical points at 
+(θ₁, φ₁) and (θ₂, φ₂).
+"""
 function geoβ(θ₁, θ₂, φ₁, φ₂)
     sΔθ½, sΔφ½ = sin((θ₁ - θ₂)/2), sin((φ₁ - φ₂)/2)
     2asin(√(sΔθ½^2 + sin(θ₁)*sin(θ₂) * sΔφ½^2))    
 end
 
+"""
+`cosgeoβ(θ₁, θ₂, φ₁, φ₂)` -> Cosine of the geodesic between two spherical points 
+at (θ₁, φ₁) and (θ₂, φ₂).
+"""
 function cosgeoβ(θ₁, θ₂, φ₁, φ₂)
     cos(θ₁-θ₂) - sin(θ₁)*sin(θ₂)*(1-cos(φ₁-φ₂))/2
 end
 
-# Types that compute the isotropic part of 
-# Spin2 and Spin0 CMBfields
-# ==================================================
 
-
-struct βcovSpin2
-    covPP̄_premult_spln::Spline1D
-    covPP_premult_spln::Spline1D
-end
-
-struct βcovSpin0 
-    covII_premult_spln::Spline1D
-end
-
-
-# constructors
-# ==================================================
-
-shift_scale_sin(β,period) = period * (sin(π*β/period - π/2) + 1) / 2
-
+"""
+`βsingrid(ngrid, period)` creats a grid of points on [0,period) ⊂ [0,π)
+with extra density near the endpoints
+"""
 βsingrid(ngrid, period)   = shift_scale_sin.(range(0,π,length=ngrid), period)
 
-function βcovSpin2(
+
+"""
+`shift_scale_sin(β,period)` internal function used in `βsingrid`
+"""
+shift_scale_sin(β,period) = period * (sin(π*β/period - π/2) + 1) / 2
+
+
+# these are the generic versions ...
+# you just need to define types for Γθ₁θ₂φ₁φ⃗, Cθ₁θ₂φ₁φ⃗
+# for dispatch
+# ==================================================
+
+# Note: the reason we restrict to φ::AbstractVector is that Spline1D's are optimized for 
+# Union{Vector, Number} so in general it is better to broadcast 
+# via via whole columns
+
+
+# overload this
+function γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗(θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗, Cθ₁θ₂φ₁φ⃗)
+    
+    φ2π, freq_mult = fullcircle(φ)
+    covPP̄  = Γθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
+    covPP  = Cθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄′ = periodize(covPP̄, freq_mult)       
+    covPP′ = periodize(covPP, freq_mult)       
+
+    return covPP̄′, covPP′
+end
+
+# overload this
+function γθ₁θ₂φ⃗(θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗)
+    
+    φ2π, freq_mult = fullcircle(φ)
+    covPP̄  = Γθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄′ = periodize(covPP̄, freq_mult)       
+
+    return covPP̄′
+end
+
+# behavior comes directly from γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗
+function γθ₁θ₂ℓ⃗_ξθ₁θ₂ℓ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗, Cθ₁θ₂φ₁φ⃗,
+    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ))),
+    γstorage = Vector{ComplexF64}(undef,length(φ)), 
+    ξstorage = Vector{ComplexF64}(undef,length(φ)), 
+    )
+    
+    γ₁₂φ⃗, ξ₁₂φ⃗ =  γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗(θ₁, θ₂, φ, Γθ₁θ₂φ₁φ⃗, Cθ₁θ₂φ₁φ⃗)      
+
+    mul!(γstorage, planFFT, γ₁₂φ⃗)
+    mul!(ξstorage, planFFT, ξ₁₂φ⃗)
+
+    return γstorage, ξstorage
+end
+
+# behavior comes directly from γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗
+function γθ₁θ₂ℓ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗,
+    planFFT  = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ))),
+    γstorage = Vector{ComplexF64}(undef,length(φ)), 
+    )
+    
+    γ₁₂φ⃗ = γθ₁θ₂φ⃗(θ₁, θ₂, φ, Γθ₁θ₂φ₁φ⃗)      
+    mul!(γstorage, planFFT, γ₁₂φ⃗)
+
+    return γstorage
+end
+
+
+
+# structs Γθ₁θ₂φ₁φ⃗_CMBpol and Cθ₁θ₂φ₁φ⃗_CMBpol
+# =====================================================
+
+"""
+IAU uses rotation around outward normal to the sphere => Q + iU is spin (+2)
+"""
+struct Γθ₁θ₂φ₁φ⃗_CMBpol
+    IAU::Bool
+    premult_spln::Spline1D
+end 
+
+struct Cθ₁θ₂φ₁φ⃗_CMBpol
+    IAU::Bool
+    premult_spln::Spline1D
+end 
+
+
+# Constructor for both Γ and C
+function ΓCθ₁θ₂φ₁φ⃗_CMBpol(
         ℓ, eeℓ, bbℓ;
+        IAU = false, 
         ngrid::Int = 100_000, 
         βgrid = βsingrid(ngrid, π),
     )
     @assert ℓ[1] == 0
     @assert ℓ[2] == 1
+    @assert IAU == false # TODO remove this an impliment the spin(+2) version
     nℓ = @. (2ℓ+1)/(4π)
     ## ↓ starts at 2 since the Jacobi expansion goes like J^(a,b)_{ℓ-2}
     j2⁺2ℓ = (@. (eeℓ + bbℓ) * nℓ)[2:end]
@@ -129,10 +213,39 @@ function βcovSpin2(
     covPP = x-> f2⁻2(cos(x))
     β2covPP̄ = Spline1D(βgrid, covPP̄.(βgrid), k=3)
     β2covPP = Spline1D(βgrid, covPP.(βgrid), k=3)
-    βcovSpin2(β2covPP̄, β2covPP)
+    Γθ₁θ₂φ₁φ⃗_CMBpol(IAU, β2covPP̄), Cθ₁θ₂φ₁φ⃗_CMBpol(IAU, β2covPP)
 end 
 
-function βcovSpin0(
+
+# Hook into method γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗
+function γθ₁θ₂φ⃗_ξθ₁θ₂φ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, 
+    Γθ₁θ₂φ₁φ⃗::Γθ₁θ₂φ₁φ⃗_CMBpol, 
+    Cθ₁θ₂φ₁φ⃗::Cθ₁θ₂φ₁φ⃗_CMBpol,
+    )
+    
+    φ2π, freq_mult = fullcircle(φ)
+    β      = geoβ.(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄  = Γθ₁θ₂φ₁φ⃗.premult_spln(β) .* multPP̄.(θ₁, θ₂, φ2π[1], φ2π)
+    covPP  = Cθ₁θ₂φ₁φ⃗.premult_spln(β) .* multPP.(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄′ = periodize(covPP̄, freq_mult)       
+    covPP′ = periodize(covPP, freq_mult)       
+
+    return covPP̄′, covPP′
+end
+
+
+
+
+# for isotropic spin 0
+# =======
+
+struct Γθ₁θ₂φ₁φ⃗_Iso
+    spln::Spline1D
+end 
+
+# constructor
+function Γθ₁θ₂φ₁φ⃗_Iso(
         ℓ, ttℓ;
         ngrid::Int = 100_000, 
         βgrid = βsingrid(ngrid,π),
@@ -144,111 +257,22 @@ function βcovSpin0(
     f0⁺0t = ((a,b,jℓ)=(0,0,j0⁺0tℓ); Fun(Jacobi(b,a),jℓ))
     covtt = x-> f0⁺0t(cos(x))
     β2covtt = Spline1D(βgrid, covtt.(βgrid), k=3)
-    βcovSpin0(β2covtt)
+    Γθ₁θ₂φ₁φ⃗_Iso(β2covtt)
 end 
 
-
-# the types operate ... this is pre-vectorized since Spline1D is on vectors
-# TODO: include the spin2 mult factors
-# ==================================================
-
-function (covP::βcovSpin2)(β::Matrix)
-    rtnPP̄ = similar(β)
-    rtnPP = similar(β)
-    for (col, cβ) ∈ enumerate(eachcol(β))
-        rtnPP̄[:,col] = covP.covPP̄_premult_spln(cβ)
-        rtnPP[:,col] = covP.covPP_premult_spln(cβ)
-    end
-    return complex(rtnPP̄), complex(rtnPP)
-end
-function (covP::βcovSpin2)(β::Union{Vector, Number})
-    rtnPP̄ = covP.covPP̄_premult_spln(β)
-    rtnPP = covP.covPP_premult_spln(β)
-    return complex(rtnPP̄), complex(rtnPP)
-end
-
-# Note: the reason we have different methods for Matrix vrs 
-# Union{Vector, Number} is that Spline1D's are optimized for 
-# Union{Vector, Number} so in general it is better to broadcast 
-# via via whole columns
-
-# Also note: the only reason we make the return argument complex 
-# is that is the eltype the planned FFT will expect. 
-
-function (covP::βcovSpin0)(β::Matrix)
-    rtn = similar(β)
-    for (col, cβ) ∈ enumerate(eachcol(β))
-        rtn[:,col] = covP.covII_premult_spln(cβ)
-    end
-    return complex(rtn)  
-end
-function (covP::βcovSpin0)(β::Union{Vector, Number})
-    return complex(covP.covII_premult_spln(β))
-end
-
-
-# ... 
-# ==================================================
-
-
-
-function γⱼₖℓ⃗_ξⱼₖℓ⃗(
-    θ₁::Real, θ₂::Real, φ::AbstractVector, covβ::βcovSpin2, 
-    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
+# Hook into method γθ₁θ₂φ⃗
+function γθ₁θ₂φ⃗(
+    θ₁::Real, θ₂::Real, φ::AbstractVector, 
+    Γθ₁θ₂φ₁φ⃗::Γθ₁θ₂φ₁φ⃗_Iso, 
     )
     
     φ2π, freq_mult = fullcircle(φ)
-
-    covPP̄, covPP = covβ(geoβ.(θ₁, θ₂, φ2π[1], φ2π))  
-    covPP̄  .*= multPP̄.(θ₁, θ₂, φ2π[1], φ2π)
-    covPP  .*= multPP.(θ₁, θ₂, φ2π[1], φ2π)
-
+    β      = geoβ.(θ₁, θ₂, φ2π[1], φ2π)
+    covPP̄  = Γθ₁θ₂φ₁φ⃗.spln(β)
     covPP̄′ = periodize(covPP̄, freq_mult)       
-    covPP′ = periodize(covPP, freq_mult)
-    γⱼₖℓ⃗    = planFFT * covPP̄′
-    ξⱼₖℓ⃗    = planFFT * covPP′
 
-    return γⱼₖℓ⃗, ξⱼₖℓ⃗
+    return complex(covPP̄′)
 end
-
-
-function γⱼₖℓ⃗(
-    θ₁::Real, θ₂::Real, φ::AbstractVector, covβ::βcovSpin0, 
-    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
-    )
-    
-    φ2π, freq_mult = fullcircle(φ)
-    β = geoβ.(θ₁, θ₂, φ2π[1], φ2π)
-    covIĪ  = covβ(β)  
-    covIĪ′ = periodize(covIĪ, freq_mult)       
-    γⱼₖℓ⃗    = planFFT * covIĪ′
-
-    return γⱼₖℓ⃗
-end
-
-
-
-
-function γⱼₖℓ⃗_ξⱼₖℓ⃗(
-    θ₁::Real, θ₂::Real, φ::AbstractVector, Γθ₁θ₂φ₁φ⃗::Function, Cθ₁θ₂φ₁φ⃗::Function,
-    planFFT = FFTW.plan_fft(Vector{ComplexF64}(undef,length(φ)))
-    )
-    
-    φ2π, freq_mult = fullcircle(φ)
-    covPP̄  = Γθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
-    covPP  = Cθ₁θ₂φ₁φ⃗(θ₁, θ₂, φ2π[1], φ2π)
-    covPP̄′ = periodize(covPP̄, freq_mult)       
-    covPP′ = periodize(covPP, freq_mult)       
-
-    γⱼₖℓ⃗    = planFFT * covPP̄′
-    ξⱼₖℓ⃗    = planFFT * covPP′
-
-    return γⱼₖℓ⃗, ξⱼₖℓ⃗
-end
-
-
-
-
 
 # Multipliers needed to convert the isotropic parts to full polarization cov 
 # =====================================================
@@ -321,6 +345,94 @@ function spec2spherecov(cl, θs)
     cheb2spherecov(β, θs)
 end
 
+
+
+
+
+# These are slated for removal ...
+# ==================================================
+
+
+
+struct βcovSpin2
+    covPP̄_premult_spln::Spline1D
+    covPP_premult_spln::Spline1D
+end
+
+struct βcovSpin0 
+    covII_premult_spln::Spline1D
+end
+
+function βcovSpin2(
+        ℓ, eeℓ, bbℓ;
+        ngrid::Int = 100_000, 
+        βgrid = βsingrid(ngrid, π),
+    )
+    @assert ℓ[1] == 0
+    @assert ℓ[2] == 1
+    nℓ = @. (2ℓ+1)/(4π)
+    ## ↓ starts at 2 since the Jacobi expansion goes like J^(a,b)_{ℓ-2}
+    j2⁺2ℓ = (@. (eeℓ + bbℓ) * nℓ)[2:end]
+    j2⁻2ℓ = (@. (eeℓ - bbℓ) * nℓ)[2:end]
+    ## ↓  TODO: check the a,b swap
+    f2⁺2  = ((a,b,jℓ)=(0,4,j2⁺2ℓ);  Fun(Jacobi(b,a),jℓ))
+    f2⁻2  = ((a,b,jℓ)=(4,0,j2⁻2ℓ);  Fun(Jacobi(b,a),jℓ))
+    # !! pre-canceled out cos β½ and sin β½ in the denom
+    covPP̄ = x-> f2⁺2(cos(x))
+    covPP = x-> f2⁻2(cos(x))
+    β2covPP̄ = Spline1D(βgrid, covPP̄.(βgrid), k=3)
+    β2covPP = Spline1D(βgrid, covPP.(βgrid), k=3)
+    βcovSpin2(β2covPP̄, β2covPP)
+end 
+
+function βcovSpin0(
+        ℓ, ttℓ;
+        ngrid::Int = 100_000, 
+        βgrid = βsingrid(ngrid,π),
+    )
+    @assert ℓ[1] == 0
+    @assert ℓ[2] == 1
+    nℓ = @. (2ℓ+1)/(4π)
+    j0⁺0tℓ = @. ttℓ * nℓ
+    f0⁺0t = ((a,b,jℓ)=(0,0,j0⁺0tℓ); Fun(Jacobi(b,a),jℓ))
+    covtt = x-> f0⁺0t(cos(x))
+    β2covtt = Spline1D(βgrid, covtt.(βgrid), k=3)
+    βcovSpin0(β2covtt)
+end 
+
+function (covP::βcovSpin2)(β::Matrix)
+    rtnPP̄ = similar(β)
+    rtnPP = similar(β)
+    for (col, cβ) ∈ enumerate(eachcol(β))
+        rtnPP̄[:,col] = covP.covPP̄_premult_spln(cβ)
+        rtnPP[:,col] = covP.covPP_premult_spln(cβ)
+    end
+    return complex(rtnPP̄), complex(rtnPP)
+end
+function (covP::βcovSpin2)(β::Union{Vector, Number})
+    rtnPP̄ = covP.covPP̄_premult_spln(β)
+    rtnPP = covP.covPP_premult_spln(β)
+    return complex(rtnPP̄), complex(rtnPP)
+end
+
+# Note: the reason we have different methods for Matrix vrs 
+# Union{Vector, Number} is that Spline1D's are optimized for 
+# Union{Vector, Number} so in general it is better to broadcast 
+# via via whole columns
+
+# Also note: the only reason we make the return argument complex 
+# is that is the eltype the planned FFT will expect. 
+
+function (covP::βcovSpin0)(β::Matrix)
+    rtn = similar(β)
+    for (col, cβ) ∈ enumerate(eachcol(β))
+        rtn[:,col] = covP.covII_premult_spln(cβ)
+    end
+    return complex(rtn)  
+end
+function (covP::βcovSpin0)(β::Union{Vector, Number})
+    return complex(covP.covII_premult_spln(β))
+end
 
 
 
