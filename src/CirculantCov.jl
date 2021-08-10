@@ -60,6 +60,7 @@ end
 
 
 """
+# slated for removal ...
 `fraccircle(∂φstart, ∂φstop, nφ)` specifies a uniform grid on a 
 contiguous interval of azumimuth. `∂φstart` begins the interval. Moving counter 
 clockwise (looking down from the north pole) to `∂φstop`. 
@@ -67,17 +68,13 @@ Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `�
 
 Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)` 
 """
-function fraccircle(∂φstart, ∂φstop, nφ)
-    @assert ∂φstart ≥ 0
-    @assert ∂φstop  ≥ 0
-    ∂φstart′, ∂φstop′ = in_0_2π(∂φstart), in_0_2π(∂φstop)
-    Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)
-    @assert div(2π, Δφspan, RoundNearest) ≈ 2π / Δφspan
-    
-    φ  = @. in_0_2π(∂φstart′ + Δφspan * (0:nφ-1) / nφ) 
+# function fraccircle(∂φstart, ∂φstop, nφ)
+#     ∂φstart′, ∂φstop′ = in_0_2π(∂φstart), in_0_2π(∂φstop)
+#     Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)    
+#     φ  = @. in_0_2π(∂φstart′ + Δφspan * (0:nφ-1) / nφ) 
+#     return φ
+# end
 
-    return φ
-end
 
 
 """
@@ -109,6 +106,75 @@ with extra density near the endpoints
 `shift_scale_sin(β,period)` internal function used in `βsingrid`
 """
 shift_scale_sin(β,period) = period * (sin(π*β/period - π/2) + 1) / 2
+
+
+
+
+# Methods for generating some useful polar grids
+# ================================================
+
+function θ_healpix_j_Nside(j_Nside) 
+    0 < j_Nside < 1  ? acos(1-abs2(j_Nside)/3)      :
+    1 ≤ j_Nside ≤ 3  ? acos(2*(2-j_Nside)/3)        :
+    3 < j_Nside < 4  ? acos(-(1-abs2(4-j_Nside)/3)) : 
+    error("argument ∉ (0,4)")
+end
+
+θ_healpix(Nside) = θ_healpix_j_Nside.((1:4Nside-1)/Nside)
+
+function θ_grid(;θspan::Tuple{T,T}, N::Int, type=:equiθ) where T<:Real
+    @assert N > 0
+    @assert 0 < θspan[1] < θspan[2] < π
+
+    if type==:equiθ
+        θgrid″ = range(θspan[1], θspan[2], length=N+2)
+    elseif type==:equicosθ
+        θgrid″ = range(cos(θspan[2]), cos(θspan[1]), length=N+2)[end:-1:1]
+    elseif type==:healpix
+        @warn """
+            When `type` argument is set to `:healpix` the parameter `N` corresponds 
+            to Healpix `Nside`, _not_ the number of θ grid points within the interval 
+            specified by `θspan` as it does when `type ∈ {:equiθ, :equicosθ}`.
+            """
+        θgrid′ = θ_healpix(N)
+        θgrid″ = θgrid′[θspan[1] .≤ θgrid′ .≤ θspan[2]]
+    else
+        error("`type` argument variable is not a valid option. Choose from `type ∈ {:equiθ, :equicosθ, :healpix}`")
+    end 
+
+    # θgrid″ subsets θgrid′ to be within θspan
+    # δ½south″ and δ½north″ are the arclength midpoints to the adjacent pixel
+    δ½south″ = (circshift(θgrid″,-1)  .- θgrid″) ./ 2
+    δ½north″ = (θgrid″ .- circshift(θgrid″,1)) ./ 2   
+    
+    # now restrict to the interior of the range of θgrid″
+    θ       = θgrid″[2:end-1]
+    δ½south = δ½south″[2:end-1]
+    δ½north = δ½north″[2:end-1]
+
+    # These are the pixel boundaries along polar
+    # so length(θ∂) == length(θ)+1
+    θ∂ = vcat(θ[1] .- δ½north[1], θ .+ δ½south)
+
+    return θ, θ∂
+end 
+
+"""
+`φ_grid(;φspan::Tuple{T,T}, N::Int)` specifies a uniform grid on a 
+contiguous interval of azumimuth. `∂φstart` begins the interval. Moving counter 
+clockwise (looking down from the north pole) to `∂φstop`. 
+Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `≥ 0`.
+
+Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)`
+"""
+function φ_grid(;φspan::Tuple{T,T}, N::Int) where T<:Real
+    ∂φstart′, ∂φstop′ = in_0_2π(φspan[1]), in_0_2π(φspan[2])
+    Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)    
+    φ∂  = @. in_0_2π(∂φstart′ + Δφspan * (0:N) / N) 
+    Δφ  = Δφspan / N
+    φ   = φ∂[1:end-1] .+ Δφ / 2
+    return φ, φ∂
+end
 
 
 # these are the generic versions ...
