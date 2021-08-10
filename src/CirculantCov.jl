@@ -129,7 +129,7 @@ function θ_grid(;θspan::Tuple{T,T}, N::Int, type=:equiθ) where T<:Real
     if type==:equiθ
         θgrid″ = range(θspan[1], θspan[2], length=N+2)
     elseif type==:equicosθ
-        θgrid″ = range(cos(θspan[2]), cos(θspan[1]), length=N+2)[end:-1:1]
+        θgrid″ = acos.(range(cos(θspan[2]), cos(θspan[1]), length=N+2)[end:-1:1])
     elseif type==:healpix
         @warn """
             When `type` argument is set to `:healpix` the parameter `N` corresponds 

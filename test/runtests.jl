@@ -3,9 +3,31 @@ import CirculantCov as CC
 using Test
 
 
+@testset "φ_grid, θ_grid" begin
+    
+    θspan = (2.3,2.7)
+    N     = 250
+    type  = :equicosθ
+    θ, θ∂ = CC.θ_grid(; θspan, N, type)
+    @test all(θspan[1] .<  θ  .<  θspan[2])
+    @test all(θspan[1] .<= θ∂ .<= θspan[2])
+    @test length(θ)  == N
+    @test length(θ∂) == N+1
+
+    θspan = (2.3,2.7)
+    N     = 250
+    type  = :equiθ
+    θ, θ∂ = CC.θ_grid(; θspan, N, type)
+    @test all(θspan[1] .<  θ  .<  θspan[2])
+    @test all(θspan[1] .<= θ∂ .<= θspan[2])
+    @test length(θ)  == N
+    @test length(θ∂) == N+1
 
 
-@testset "CirculantCov: counterclock_Δφ and fullcircle" begin
+end
+
+
+@testset "counterclock_Δφ and fullcircle" begin
     
     φstart, φstop = 0, 1.0        ; @test CC.counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
     φstart, φstop = 0, π          ; @test CC.counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
