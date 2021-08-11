@@ -122,7 +122,7 @@ end
 
 θ_healpix(Nside) = θ_healpix_j_Nside.((1:4Nside-1)/Nside)
 
-function θ_grid(;θspan::Tuple{T,T}, N::Int, type=:equiθ) where T<:Real
+function θ_grid(;θspan::NTuple{2,Real}, N::Int, type=:equiθ)
     @assert N > 0
     @assert 0 < θspan[1] < θspan[2] < π
 
@@ -160,14 +160,14 @@ function θ_grid(;θspan::Tuple{T,T}, N::Int, type=:equiθ) where T<:Real
 end 
 
 """
-`φ_grid(;φspan::Tuple{T,T}, N::Int)` specifies a uniform grid on a 
+`φ_grid(;φspan::Tuple{Real,Real}, N::Int)` specifies a uniform grid on a 
 contiguous interval of azumimuth. `∂φstart` begins the interval. Moving counter 
 clockwise (looking down from the north pole) to `∂φstop`. 
 Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `≥ 0`.
 
 Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)`
 """
-function φ_grid(;φspan::Tuple{T,T}, N::Int) where T<:Real
+function φ_grid(;φspan::NTuple{2,Real}, N::Int)
     ∂φstart′, ∂φstop′ = in_0_2π(φspan[1]), in_0_2π(φspan[2])
     Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)    
     φ∂  = @. in_0_2π(∂φstart′ + Δφspan * (0:N) / N) 
