@@ -39,7 +39,15 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-in_0_2π(φ) = rem2pi(φ, RoundDown)
+# The if/else is introduced so that we always return a value in [0,2π)
+function in_0_2π(φ::T) where T 
+    if div(φ, 2π, RoundNearest) ≈ φ/(2π)
+        return zero(T)
+    else 
+        return rem2pi(φ, RoundDown)
+    end 
+end
+
 
 counterclock_Δφ(φstart, φstop) = in_0_2π(φstop - φstart)
 
@@ -57,25 +65,6 @@ function fullcircle(φ::AbstractVector)
 
     return φ2π, freq_mult
 end
-
-
-"""
-# slated for removal ...
-`fraccircle(∂φstart, ∂φstop, nφ)` specifies a uniform grid on a 
-contiguous interval of azumimuth. `∂φstart` begins the interval. Moving counter 
-clockwise (looking down from the north pole) to `∂φstop`. 
-Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `≥ 0`.
-
-Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)` 
-"""
-# function fraccircle(∂φstart, ∂φstop, nφ)
-#     ∂φstart′, ∂φstop′ = in_0_2π(∂φstart), in_0_2π(∂φstop)
-#     Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)    
-#     φ  = @. in_0_2π(∂φstart′ + Δφspan * (0:nφ-1) / nφ) 
-#     return φ
-# end
-
-
 
 """
 `geoβ(θ₁, θ₂, φ₁, φ₂)` -> Geodesic between two spherical points at 
