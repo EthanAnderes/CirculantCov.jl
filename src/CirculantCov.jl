@@ -48,6 +48,15 @@ function in_0_2π(φ::T) where T
     end 
 end
 
+# The if/else is introduced so that we always return a value in [-π,π)
+function in_negπ_π(φ::T) where T 
+    rtn = rem2pi(φ, RoundNearest)
+    if rtn ≈ π
+        return -rtn
+    else
+        return rtn
+    end
+end
 
 counterclock_Δφ(φstart, φstop) = in_0_2π(φstop - φstart)
 
