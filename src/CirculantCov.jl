@@ -165,12 +165,14 @@ Only integer fractions are allowed and both `∂φstart`, `∂φstop` must be `�
 
 Note: `(∂φstart, ∂φstop) = (5.3, 1.0) ≡ (5.3, 1.0 + 2π)`
 """
-function φ_grid(;φspan::NTuple{2,Real}, N::Int)
-    ∂φstart′, ∂φstop′ = in_0_2π(φspan[1]), in_0_2π(φspan[2])
-    Δφspan = counterclock_Δφ(∂φstart′, ∂φstop′)    
+function φ_grid(;φspan::Tuple{T1, T2}, N::Int) where {T1<:Real, T2<:Real}
+    ∂φstart′, ∂φstop′ = promote(in_0_2π(φspan[1]), in_0_2π(φspan[2]))
+    T12    = promote_type(T1, T2)
+    Δφspan = ∂φstart′ == ∂φstop′ ? T12(2π) : counterclock_Δφ(∂φstart′, ∂φstop′)    
     φ∂  = @. in_0_2π(∂φstart′ + Δφspan * (0:N) / N) 
     Δφ  = Δφspan / N
-    φ   = φ∂[1:end-1] .+ Δφ / 2
+    ## φ   = φ∂[1:end-1] .+ Δφ / 2
+    φ   = φ∂[1:end-1] 
     return φ, φ∂
 end
 
