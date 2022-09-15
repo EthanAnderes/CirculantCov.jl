@@ -51,6 +51,46 @@ end
 end
 
 
+@testset "test in_0_2π and in_negπ_π" begin
+
+    # in_0_2π
+
+    @test CC.in_0_2π(0.0)   ≈ 0.0
+    @test CC.in_0_2π(2π)    ≈ 0.0
+    @test CC.in_0_2π(-2π)   ≈ 0.0
+
+    φ = range(0,2π,20)[1:end-1] # don't want 2π in this test range
+    @test CC.in_0_2π.(φ) ≈ φ
+    @test CC.in_0_2π.(φ .+ 2π) ≈ φ
+    @test CC.in_0_2π.(φ .+ 2*2π) ≈ φ
+    @test CC.in_0_2π.(φ .+ 3*2π) ≈ φ
+    @test CC.in_0_2π.(φ .- 3*2π) ≈ φ
+    @test CC.in_0_2π.(φ .- 2*2π) ≈ φ
+    @test CC.in_0_2π.(φ .- 2π) ≈ φ
+
+    @test CC.in_0_2π.(deg2rad.([0, 360]))   ≈ [0.0,0.0]
+    @test CC.in_0_2π.(deg2rad.([-180, 180])) ≈ [π, π]
+    @test CC.in_0_2π.(deg2rad.([-60, 60])) ≈ [deg2rad(300), deg2rad(60)]
+
+    # in_negπ_π
+    
+    @test CC.in_negπ_π(0.0)  ≈ 0.0
+    @test CC.in_negπ_π(Float64(-π))   ≈ -π
+    @test CC.in_negπ_π(Float64(π))    ≈ -π
+
+    φ = range(-π,π,20)[1:end-1] # don't want π in this test range
+    @test CC.in_negπ_π.(φ) ≈ φ
+    @test CC.in_negπ_π.(φ .+ 2π) ≈ φ
+    @test CC.in_negπ_π.(φ .+ 2*2π) ≈ φ
+    @test CC.in_negπ_π.(φ .+ 3*2π) ≈ φ
+    @test CC.in_negπ_π.(φ .- 3*2π) ≈ φ
+    @test CC.in_negπ_π.(φ .- 2*2π) ≈ φ
+    @test CC.in_negπ_π.(φ .- 2π) ≈ φ
+
+    @test CC.in_negπ_π.(deg2rad.([-180, 180])) ≈ [-π, -π]
+    @test CC.in_negπ_π.(deg2rad.([-60, 60])) ≈ [deg2rad(-60), deg2rad(60)]
+
+end 
 
 # @testset "CirculantCov: periodize" begin
 

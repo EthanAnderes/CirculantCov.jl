@@ -39,18 +39,11 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-# The if/else is introduced so that we always return a value in [0,2π)
-function in_0_2π(φ::T) where T 
-    if div(φ, 2π, RoundNearest) ≈ φ/(2π)
-        return zero(T)
-    else 
-        return rem2pi(φ, RoundDown)
-    end 
-end
+in_0_2π(φ) = mod(φ, 2π)
 
 # The if/else is introduced so that we always return a value in [-π,π)
 function in_negπ_π(φ::T) where T 
-    rtn = rem2pi(φ, RoundNearest)
+    rtn = rem2pi(1*φ, RoundNearest) # the 1* fixes the error that rem2pi doesn't take irrational arguments
     if rtn ≈ π
         return -rtn
     else
