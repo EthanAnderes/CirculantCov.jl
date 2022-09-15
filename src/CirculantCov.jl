@@ -53,15 +53,19 @@ end
 
 counterclock_Δφ(φstart, φstop) = in_0_2π(φstop - φstart)
 
-function fullcircle(φ::AbstractVector)
+function φ2φspan(φ)
     Δφpix  = counterclock_Δφ(φ[1], φ[2])
     Δφspan = counterclock_Δφ(φ[1], φ[end]) + Δφpix
     # The extra Δφpix makes Δφspan measure the (angular) distance between the 
     # left boundary of the starting pixel and the right boundary of the ending pixel 
-    
+    φspan = (φ[1], φ[1] + Δφspan)
+    return in_0_2π.(φspan)
+end
+
+function fullcircle(φ::AbstractVector)
+    Δφspan = φ2φspan(φ)
     @assert div(2π, Δφspan, RoundNearest) ≈ 2π / Δφspan
     freq_mult = Int(div(2π, Δφspan, RoundNearest))
-    
     nφ2π = length(φ)*freq_mult
     φ2π  = @. in_0_2π(φ[1] + 2π * (0:nφ2π-1) / nφ2π) 
 
@@ -163,7 +167,7 @@ function φ_grid(;φspan::Tuple{T1, T2}, N::Int) where {T1<:Real, T2<:Real}
     T12    = promote_type(T1, T2)
     Δφspan = ∂φstart′ == ∂φstop′ ? T12(2π) : counterclock_Δφ(∂φstart′, ∂φstop′)    
     φ∂  = @. in_0_2π(∂φstart′ + Δφspan * (0:N) / N) 
-    Δφ  = Δφspan / N
+    ## Δφ  = Δφspan / N
     ## φ   = φ∂[1:end-1] .+ Δφ / 2
     φ   = φ∂[1:end-1] 
     return φ, φ∂
