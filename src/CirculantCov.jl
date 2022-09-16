@@ -39,7 +39,20 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-in_0_2π(φ) = mod(φ, 2π)
+in_0_2π(φ) =  mod(φ, 2π)
+
+# The following is basically `in_0_2π(φ) =  mod(φ, 2π)` but appears to be 
+# more accurate.
+# The if/else is introduced so that we always return a value in [0,2π)
+# function in_0_2π(φ::T) where T 
+#     # rtn = rem2pi(1*φ, RoundDown) # the 1* fixes the error that rem2pi doesn't take irrational arguments
+#     rtn = mod2pi(1*φ) # the 1* fixes the error that rem2pi doesn't take irrational arguments
+#     if rtn ≈ 2π
+#         return zero(T)
+#     else
+#         return rtn
+#     end
+# end
 
 # The if/else is introduced so that we always return a value in [-π,π)
 function in_negπ_π(φ::T) where T 
@@ -59,16 +72,20 @@ function φ2φspan(φ)
     # The extra Δφpix makes Δφspan measure the (angular) distance between the 
     # left boundary of the starting pixel and the right boundary of the ending pixel 
     φspan = (φ[1], φ[1] + Δφspan)
-    return in_0_2π.(φspan)
+    return φspan
 end
 
 function fullcircle(φ::AbstractVector)
-    Δφspan = φ2φspan(φ)
-    @assert div(2π, Δφspan, RoundNearest) ≈ 2π / Δφspan
-    freq_mult = Int(div(2π, Δφspan, RoundNearest))
+    φspan    = φ2φspan(φ)
+    φs₁, φs₂ = in_0_2π.(φspan)
+    Δφspan   = φs₁ ≈ φs₂ ? 2π : counterclock_Δφ(φs₁, φs₂)    
+    
+    freq_mult_float = 2π / Δφspan 
+    freq_mult       = round(Int, freq_mult_float) # div(2π, Δφspan, RoundNearest)
+    @assert isapprox(freq_mult, freq_mult_float, rtol=1e-6)
+
     nφ2π = length(φ)*freq_mult
     φ2π  = @. in_0_2π(φ[1] + 2π * (0:nφ2π-1) / nφ2π) 
-
     return φ2π, freq_mult
 end
 

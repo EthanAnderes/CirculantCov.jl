@@ -23,7 +23,6 @@ using Test
     @test length(θ)  == N
     @test length(θ∂) == N+1
 
-
 end
 
 
@@ -55,9 +54,9 @@ end
 
     # in_0_2π
 
-    @test CC.in_0_2π(0.0)   ≈ 0.0
-    @test CC.in_0_2π(2π)    ≈ 0.0
-    @test CC.in_0_2π(-2π)   ≈ 0.0
+    @test CC.in_0_2π(0.0) ≈ 0.0
+    @test CC.in_0_2π(2π)  ≈ 0.0
+    @test CC.in_0_2π(-2π) ≈ 0.0 atol=1e-10
 
     φ = range(0,2π,20)[1:end-1] # don't want 2π in this test range
     @test CC.in_0_2π.(φ) ≈ φ
