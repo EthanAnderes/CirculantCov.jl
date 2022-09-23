@@ -40,9 +40,9 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
 end
 
 in_0_2π(φ) =  mod(φ, 2π)
-
-# The following is basically `in_0_2π(φ) =  mod(φ, 2π)` but appears to be 
-# more accurate.
+# 
+# ... equiv to ...
+# 
 # The if/else is introduced so that we always return a value in [0,2π)
 # function in_0_2π(φ::T) where T 
 #     # rtn = rem2pi(1*φ, RoundDown) # the 1* fixes the error that rem2pi doesn't take irrational arguments
@@ -64,7 +64,18 @@ function in_negπ_π(φ::T) where T
     end
 end
 
+
 counterclock_Δφ(φstart, φstop) = in_0_2π(φstop - φstart)
+#
+# ... equiv to ...
+#
+# function counterclock_Δφ(φ_start, φ_stop)
+#     Δφ  = in_negπ_π(φ_stop) - in_negπ_π(φ_start)
+#     Δφ′ =  Δφ < 0 ? 2π + Δφ : Δφ
+#     return in_0_2π(Δφ′)
+# end
+
+
 
 function φ2φspan(φ)
     Δφpix  = counterclock_Δφ(φ[1], φ[2])
@@ -88,6 +99,13 @@ function fullcircle(φ::AbstractVector)
     φ2π  = @. in_0_2π(φ[1] + 2π * (0:nφ2π-1) / nφ2π) 
     return φ2π, freq_mult
 end
+
+
+# This formula for angle_separation is the geodesic formula simplified 
+# for two points (θ₁, φ₁) & (θ₂, φ₂) on the sphere at the equator
+# where Δφ = φ₂ - φ₁, θ₁ = θ₂ = π/2
+angle_separation(Δφ)  = 2asin(abs(sin(Δφ/2)))
+
 
 """
 `geoβ(θ₁, θ₂, φ₁, φ₂)` -> Geodesic between two spherical points at 

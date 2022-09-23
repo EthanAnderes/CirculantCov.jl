@@ -26,7 +26,7 @@ using Test
 end
 
 
-@testset "counterclock_Δφ and fullcircle" begin
+@testset "counterclock_Δφ and angle_separation" begin
     
     φstart, φstop = 0, 1.0        ; @test CC.counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
     φstart, φstop = 0, π          ; @test CC.counterclock_Δφ(φstart, φstop) ≈ φstop - φstart
@@ -40,6 +40,30 @@ end
     φstart, φstop =  3π/2       , 0 ; @test isapprox(CC.counterclock_Δφ(φstart, φstop), π/2, rtol=1e-5)
     φstart, φstop =  2pi - .001 , 0 ; @test isapprox(CC.counterclock_Δφ(φstart, φstop), .001, rtol=1e-5)
 
+    @test isapprox(CC.counterclock_Δφ(2π, 0), 0.0; atol=1e-10)
+    @test isapprox(CC.counterclock_Δφ(0, 2π), 0.0; atol=1e-10)
+    @test isapprox(CC.angle_separation(2π), 0.0; atol=1e-10)
+    @test isapprox(CC.angle_separation(-2π), 0.0; atol=1e-10)
+
+    ϵ = 0.01
+    @test CC.counterclock_Δφ(0, 2π - ϵ) ≈ 2π - ϵ
+    @test CC.counterclock_Δφ(2π - ϵ, 0) ≈ ϵ
+    @test CC.angle_separation(ϵ) ≈ CC.angle_separation(2π - ϵ)
+    @test CC.angle_separation(ϵ) ≈ CC.angle_separation(ϵ - 2π)
+    @test CC.angle_separation(ϵ) ≈ CC.angle_separation(4π - ϵ)
+    @test CC.angle_separation(ϵ) ≈ CC.angle_separation(ϵ - 4π)
+
+    ϵ = 0.01
+    φₒ = range(0, 2π, 100)
+    @test all(CC.counterclock_Δφ.(φₒ .- ϵ, φₒ) .≈ ϵ)
+    @test all(CC.counterclock_Δφ.(φₒ , φₒ .+ ϵ) .≈ ϵ)
+
+
+end
+
+
+@testset "fullcircle" begin
+
     @test CC.fullcircle(2pi * (0:9) / 10)[2]   == 1
     @test CC.fullcircle(pi/2 * (0:9) / 10)[2]  == 4
     @test CC.fullcircle(2pi/3 * (0:9) / 10)[2] == 3
@@ -48,6 +72,7 @@ end
     @test all(CC.fullcircle(2pi/3 * (0:9) / 10)[1]  .≈ 2pi * (0:29) / 30)
 
 end
+
 
 
 @testset "test in_0_2π and in_negπ_π" begin
