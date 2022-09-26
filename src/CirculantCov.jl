@@ -227,7 +227,7 @@ function ℝfθk2▪(Uf::AbstractArray)
     return [copy(v) for v ∈ eachcol(Uf)]
 end
  
-function ▪2ℝfθk(w::Vector{Vector{To}}) where To 
+function ▪2ℝfθk(w::Vector{V}) where {To, V<:AbstractVector{To}} 
     nθ, nφ½₊1 = length(w[1]), length(w)
     fθk = zeros(To, nθ, nφ½₊1)
     for i in 1:nφ½₊1 
@@ -256,7 +256,7 @@ function ℂfθk2▪(Up::AbstractArray{To}) where To
     w
 end
 
-function ▪2ℂfθk(w::Vector{Vector{To}}, nφ::Int) where To 
+function ▪2ℂfθk(w::Vector{V}, nφ::Int) where {To, V<:AbstractVector{To}} 
     nθₓ2, nφ½₊1   = length(w[1]), length(w)
     @assert nφ½₊1 == nφ÷2+1
     @assert iseven(nθₓ2)
