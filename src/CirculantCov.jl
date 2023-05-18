@@ -288,14 +288,12 @@ end
 # Note: hard coding Float64 and CompleF64 for now
 function Γ2cov_blks(Γ; θ, φ, ℓrange=1:length(φ)÷2+1)
     nθ, nφ = length(θ), length(φ)
-    ptmW   = plan_fft(Vector{ComplexF64}(undef, nφ))
+    ptmW   = [plan_fft(Vector{ComplexF64}(undef, nφ), num_threads=1) for i=1:Threads.nthreads()]
     M▫     = Matrix{Float64}[zeros(Float64,nθ,nθ) for ℓ′ in ℓrange]
-    for k = 1:nθ
-        for j = 1:nθ
-            Mγⱼₖℓ⃗  = γθ₁θ₂ℓ⃗(θ[j], θ[k], φ, Γ, ptmW)
-            for (i,ℓ′) in enumerate(ℓrange)
-                M▫[i][j,k] = real(Mγⱼₖℓ⃗[ℓ′])
-            end
+    Threads.@threads for (k,j) in collect(Iterators.product(1:nθ, 1:nθ))
+        Mγⱼₖℓ⃗  = γθ₁θ₂ℓ⃗(θ[j], θ[k], φ, Γ, ptmW[Threads.threadid()])
+        for (i,ℓ′) in enumerate(ℓrange)
+            M▫[i][j,k] = real(Mγⱼₖℓ⃗[ℓ′])
         end
     end
     return M▫
@@ -307,18 +305,16 @@ end
 # Note: hard coding Float64 and CompleF64 for now
 function ΓC2cov_blks(Γ, C; θ, φ, ℓrange=1:length(φ)÷2+1)
     nθ, nφ = length(θ), length(φ)
-    ptmW   = plan_fft(Vector{ComplexF64}(undef, nφ))
+    ptmW   = [plan_fft(Vector{ComplexF64}(undef, nφ), num_threads=1) for i=1:Threads.nthreads()]
     M▫     = Matrix{ComplexF64}[zeros(ComplexF64,2nθ,2nθ) for ℓ′ in ℓrange]
-    for k = 1:nθ
-        for j = 1:nθ
-            Mγⱼₖℓ⃗, Mξⱼₖℓ⃗ = γθ₁θ₂ℓ⃗_ξθ₁θ₂ℓ⃗(θ[j], θ[k], φ, Γ, C, ptmW)
-            for (i,ℓ′) in enumerate(ℓrange)
-                Jℓ′ = Jperm(ℓ′, nφ)
-                M▫[i][j,   k   ] = Mγⱼₖℓ⃗[ℓ′]
-                M▫[i][j,   k+nθ] = Mξⱼₖℓ⃗[ℓ′]
-                M▫[i][j+nθ,k   ] = conj(Mξⱼₖℓ⃗[Jℓ′])
-                M▫[i][j+nθ,k+nθ] = conj(Mγⱼₖℓ⃗[Jℓ′])
-            end
+    Threads.@threads for (k,j) in collect(Iterators.product(1:nθ, 1:nθ))
+        Mγⱼₖℓ⃗, Mξⱼₖℓ⃗ = γθ₁θ₂ℓ⃗_ξθ₁θ₂ℓ⃗(θ[j], θ[k], φ, Γ, C, ptmW[Threads.threadid()])
+        for (i,ℓ′) in enumerate(ℓrange)
+            Jℓ′ = Jperm(ℓ′, nφ)
+            M▫[i][j,   k   ] = Mγⱼₖℓ⃗[ℓ′]
+            M▫[i][j,   k+nθ] = Mξⱼₖℓ⃗[ℓ′]
+            M▫[i][j+nθ,k   ] = conj(Mξⱼₖℓ⃗[Jℓ′])
+            M▫[i][j+nθ,k+nθ] = conj(Mγⱼₖℓ⃗[Jℓ′])
         end
     end
     return M▫
@@ -442,9 +438,9 @@ function ΓCθ₁θ₂φ₁φ⃗_CMBpol(
     @assert ℓ[2] == 1
     @assert IAU == false # TODO remove this an impliment the spin(+2) version
     nℓ = @. (2ℓ+1)/(4π)
-    ## ↓ starts at 2 since the Jacobi expansion goes like J^(a,b)_{ℓ-2}
-    j2⁺2ℓ = (@. (eeℓ + bbℓ) * nℓ)[2:end]
-    j2⁻2ℓ = (@. (eeℓ - bbℓ) * nℓ)[2:end]
+    ## ↓ starts at ℓ=2 since the Jacobi expansion goes like J^(a,b)_{ℓ-2}
+    j2⁺2ℓ = (@. (eeℓ + bbℓ) * nℓ)[3:end]
+    j2⁻2ℓ = (@. (eeℓ - bbℓ) * nℓ)[3:end]
     ## ↓  TODO: check the a,b swap
     f2⁺2  = ((a,b,jℓ)=(0,4,j2⁺2ℓ);  Fun(Jacobi(b,a),jℓ))
     f2⁻2  = ((a,b,jℓ)=(4,0,j2⁻2ℓ);  Fun(Jacobi(b,a),jℓ))
