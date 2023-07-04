@@ -39,7 +39,7 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-in_0_2π(φ) =  mod(φ, 2π)
+in_0_2π(φ::T) where T =  mod(φ, 2*T(π))
 # 
 # ... equiv to ...
 # 
