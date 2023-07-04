@@ -39,7 +39,12 @@ function periodize(f::Vector{T}, freq_mult::Int) where {T}
     f′[1:nfm]
 end
 
-in_0_2π(φ::T) where T =  mod(φ, 2*T(π))
+function in_0_2π(φ::Real)
+    pφ, p2π = promote(φ, 2*π) # handles the case φ=0 for in_0_2π
+    mod(pφ, p2π)
+end
+# special case so that in_0_2π(Float32(2π)) ≈ Float32(2π)
+in_0_2π(φ::Float32) = mod(φ, Float32(2π)) 
 # 
 # ... equiv to ...
 # 
