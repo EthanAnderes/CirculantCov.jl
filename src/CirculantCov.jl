@@ -5,6 +5,7 @@ using ApproxFun: Fun, Jacobi
 using FastTransforms: jac2cheb
 using FFTW: plan_fft
 using LinearAlgebra: mul!
+using AssociatedLegendrePolynomials: λlm
 
 # J
 # ==================================================
@@ -25,6 +26,22 @@ function Jperm end
 function Jperm(ℓ::Int, n::Int)
     @assert 1 <= ℓ <= n
     ℓ==1 ? 1 : n - ℓ + 2
+end
+
+# Quadrature pixel area element for GCP grids
+# ==================================================
+
+function ΔΩ(θvec::AbstractVector{T}, nφ) where T
+
+    nθ   = length(θvec)
+    lmax = nθ - 1
+
+    Λ    = λlm(0:lmax, 0, cos.(θvec)) # ℓ indexes the columns
+    b    = zeros(T, nθ)
+    b[1] = √(4π) / nφ
+
+    return Λ' \ b
+
 end
 
 
