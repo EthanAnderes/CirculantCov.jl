@@ -31,13 +31,10 @@ end
 # Quadrature pixel area element for GCP grids
 # ==================================================
 
-function ΔΩ(θvec::AbstractVector{T}, nφ) where T
-
-    nθ   = length(θvec)
-    lmax = nθ - 1
+function ΔΩ(θvec::AbstractVector{T}, nφ; lmax=(length(θvec)+1)÷2) where T
 
     Λ    = λlm(0:lmax, 0, cos.(θvec)) # ℓ indexes the columns
-    b    = zeros(T, nθ)
+    b    = zeros(T, lmax+1)
     b[1] = √(4π) / nφ
 
     return Λ' \ b
